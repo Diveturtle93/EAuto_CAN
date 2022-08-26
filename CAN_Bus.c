@@ -5,7 +5,7 @@
 // Datum	:	Aug 23, 2022
 // Version	:	1.0
 // Autor	:	Diveturtle93
-// Projekt	:	STM32F767ZI
+// Projekt	:	EAuto_CAN
 //----------------------------------------------------------------------
 
 // Einfuegen der standard Include-Dateien
@@ -15,92 +15,91 @@
 
 // Einfuegen der STM Include-Dateien
 //----------------------------------------------------------------------
-#include "can.h"
+
 //----------------------------------------------------------------------
 
 // Einfuegen der eigenen Include Dateien
 //----------------------------------------------------------------------
 #include "CAN_Bus.h"
+#include "millis.h"
 //----------------------------------------------------------------------
 
-// Ringpuffer definieren
+// Arrays definieren
 //----------------------------------------------------------------------
-ring_buffer rx_buffer;
-ring_buffer tx_buffer;
+CAN_Paket CAN_Output_Paket_Liste[ANZAHL_OUTPUT_PAKETE];
+uint8_t CAN_Output_Signal_Liste[ANZAHL_OUTPUT_PAKETE * 8];
+uint8_t CAN_Input_Signal_Liste[CAN_BUFFER_SIZE*8];
 
-ring_buffer *_rx_buffer;
-ring_buffer *_tx_buffer;
+ring_buffer rxHeader;
 //----------------------------------------------------------------------
 
-void Ringbuf_init(void)
+// Empfangene CAN-Nachricht speichern
+//----------------------------------------------------------------------
+void CAN_rx_read (CAN_HandleTypeDef* hcan, uint32_t RxFifo)
 {
-	_rx_buffer = &rx_buffer;
-	_tx_buffer = &tx_buffer;
-
-	/* Enable the UART Error Interrupt: (Frame error, noise error, overrun error) */
-	__HAL_CAN_ENABLE_IT(&hcan3, CAN_IT_ERROR);
-
-	/* Enable the UART Data Register not empty Interrupt */
-	__HAL_CAN_ENABLE_IT(&hcan3, CAN_IT_RX_FIFO0_MSG_PENDING);
-}
-
-void CAN_isr(CAN_HandleTypeDef* hcan)
-{
-	uint32_t isrflags   = READ_REG(hcan->Instance->MSR);
-	uint32_t cr1its     = READ_REG(hcan->Instance->IER);
-
-	/*If interrupt is caused due to Transmit Data Register Empty */
-	if (((isrflags & CAN_MSR_TXM) != RESET) && ((cr1its & CAN_IER_TMEIE) != RESET))
+	if (CAN_rx_available() < CAN_BUFFER_SIZE)
 	{
-		if(tx_buffer.head == tx_buffer.tail)
-		{
-			// Buffer empty, so disable interrupts
-			__HAL_CAN_DISABLE_IT(hcan, CAN_IT_TX_MAILBOX_EMPTY);
-		}
-		else
-		{
-			// There is more data in the output buffer. Send the next byte
-			tx_buffer.tail = (tx_buffer.tail + 1) % CAN_BUFFER_SIZE;
+		CAN_RxHeaderTypeDef _tmp_Rx;
+		HAL_CAN_GetRxMessage(hcan, RxFifo, &_tmp_Rx, &CAN_Input_Signal_Liste[rxHeader.head*8]);
+		rxHeader.Paket[rxHeader.head] = _tmp_Rx;
+		rxHeader.head = (rxHeader.head == (CAN_BUFFER_SIZE - 1)) ? 0 : (rxHeader.head + 1);
+	}
+	else
+	{
 
-			hcan->Instance->MSR;
-		}
-
-		return;
 	}
 }
+//----------------------------------------------------------------------
 
-void CAN_write(CAN_HandleTypeDef* hcan)
+// Nachrichten auf CAN-Bus senden
+//----------------------------------------------------------------------
+void CAN_write (CAN_HandleTypeDef* hcan)
 {
-	if (((_tx_buffer->head)-(_tx_buffer->tail)) >= 0)
+	for (uint16_t i = 0; i < ANZAHL_OUTPUT_PAKETE; i++)
 	{
-		int i = (_tx_buffer->head + 1) % CAN_BUFFER_SIZE;
+		if (CAN_Output_Paket_Liste[i].sende_time < (millis() - CAN_Output_Paket_Liste[i].sendeintervall))
+		{
+			CAN_TxHeaderTypeDef TxHeader;
 
-		// If the output buffer is full, there's nothing for it other than to
-		// wait for the interrupt handler to empty it a bit
-		// ???: return 0 here instead?
-		while (i == _tx_buffer->tail);
+			TxHeader.StdId = CAN_Output_Paket_Liste[i].id;
+			TxHeader.ExtId = 0x00;
+			TxHeader.DLC = CAN_Output_Paket_Liste[i].length;
+			TxHeader.RTR = CAN_RTR_DATA;
+			TxHeader.IDE = CAN_ID_STD;
+			TxHeader.TransmitGlobalTime=DISABLE;
 
-		_tx_buffer->Paket[_tx_buffer->head];
-		_tx_buffer->head = i;
+			while (HAL_CAN_IsTxMessagePending(hcan, CAN_TX_MAILBOX0) == 1);
 
-		__HAL_CAN_ENABLE_IT(hcan, CAN_IT_TX_MAILBOX_EMPTY);
+			if (HAL_CAN_AddTxMessage(hcan, &TxHeader, &CAN_Output_Signal_Liste[i*8], (uint32_t *)CAN_TX_MAILBOX0) != 0)
+			{
+
+			}
+			else
+			{
+				CAN_Output_Paket_Liste[i].sende_time = millis();
+			}
+		}
 	}
 }
+//----------------------------------------------------------------------
 
-Output_Paket Test(uint16_t id, uint8_t length, uint16_t sendeintervall, uint16_t sende_init_time)
+// CAN-Nachrichten definieren
+//----------------------------------------------------------------------
+CAN_Paket CAN_Nachricht (uint16_t id, uint8_t length, uint16_t sendeintervall, uint32_t sende_init_time)
 {
-	Output_Paket test = {id, length, sendeintervall, sende_init_time};
+	CAN_Paket TxHeader = {id, length, sendeintervall - 1, sende_init_time};
 
-	return test;
+	return TxHeader;
 }
+//----------------------------------------------------------------------
 
-void konfiguriere_CAN(void)
+// Abfrage, ob CAN-Nachricht verfuegbar
+//----------------------------------------------------------------------
+uint8_t CAN_rx_available (void)
 {
-	Output_Paket CAN_Output_Paket_Liste[ANZAHL_OUTPUT_PAKETE];
-
-	// Paket: SENDE_BAMOCAR_MOTOR_RPM Bamocar Sendeauftrag
-	CAN_Output_Paket_Liste[0] = Test(0x108, 1, 25, 17);
-	CAN_Output_Paket_Liste[1] = Test(0x283, 1, 25, 13);
-	CAN_Output_Paket_Liste[2] = Test(0x372, 2, 25, 14);
-	CAN_Output_Paket_Liste[3] = Test(0x182, 1, 25, 7);
+	if (rxHeader.head >= rxHeader.tail)
+		return rxHeader.head - rxHeader.tail;
+	else
+		return CAN_BUFFER_SIZE - (rxHeader.tail - rxHeader.head);
 }
+//----------------------------------------------------------------------
