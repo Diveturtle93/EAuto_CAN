@@ -1,0 +1,45 @@
+// Ringpuffer definieren
+//----------------------------------------------------------------------
+ring_buffer rx_buffer;
+ring_buffer tx_buffer;
+
+ring_buffer *_rx_buffer;
+ring_buffer *_tx_buffer;
+//----------------------------------------------------------------------
+
+void Ringbuf_init(void)
+{
+	_rx_buffer = &rx_buffer;
+	_tx_buffer = &tx_buffer;
+
+	/* Enable the UART Error Interrupt: (Frame error, noise error, overrun error) */
+	__HAL_CAN_ENABLE_IT(&hcan3, CAN_IT_ERROR);
+
+	/* Enable the UART Data Register not empty Interrupt */
+	__HAL_CAN_ENABLE_IT(&hcan3, CAN_IT_RX_FIFO0_MSG_PENDING);
+}
+
+void CAN_isr(CAN_HandleTypeDef* hcan)
+{
+	uint32_t isrflags   = READ_REG(hcan->Instance->MSR);
+	uint32_t cr1its     = READ_REG(hcan->Instance->IER);
+
+	/*If interrupt is caused due to Transmit Data Register Empty */
+	if (((isrflags & CAN_MSR_TXM) != RESET) && ((cr1its & CAN_IER_TMEIE) != RESET))
+	{
+		if(tx_buffer.head == tx_buffer.tail)
+		{
+			// Buffer empty, so disable interrupts
+			__HAL_CAN_DISABLE_IT(hcan, CAN_IT_TX_MAILBOX_EMPTY);
+		}
+		else
+		{
+			// There is more data in the output buffer. Send the next byte
+			tx_buffer.tail = (tx_buffer.tail + 1) % CAN_BUFFER_SIZE;
+
+			hcan->Instance->MSR;
+		}
+
+		return;
+	}
+}
