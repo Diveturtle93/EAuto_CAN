@@ -22,23 +22,17 @@
 // Einfuegen der STM Include-Dateien
 //----------------------------------------------------------------------
 #include "can.h"
+#include "main.h"
 //----------------------------------------------------------------------
 
 // Konstanten definieren
 //----------------------------------------------------------------------
-
+#define ANZAHL_OUTPUT_PAKETE			24									// Anzahl Sende Nachrichten
 //----------------------------------------------------------------------
 
-// Struktur definieren
 //----------------------------------------------------------------------
-typedef enum
-{
-	false,
-	true
-} bool;
-//----------------------------------------------------------------------
-typedef enum
-{
+typedef enum																// TypeDef fuer Empfangsbuffer groesse
+{																			// Tabellenform
 	RX_SIZE_2 = (uint16_t)2,
 	RX_SIZE_4 = (uint16_t)4,
 	RX_SIZE_8 = (uint16_t)8,
@@ -51,8 +45,8 @@ typedef enum
 	RX_SIZE_1024 = (uint16_t)1024,
 } RXQUEUE_TABLE;
 //----------------------------------------------------------------------
-typedef enum
-{
+typedef enum																// TypeDef fuer Sendebuffer groesse
+{																			// Tabellenform
 	TX_SIZE_2 = (uint16_t)2,
 	TX_SIZE_4 = (uint16_t)4,
 	TX_SIZE_8 = (uint16_t)8,
@@ -72,39 +66,54 @@ typedef struct CAN_message_t
 	uint8_t idhit;															// Filter der die Nachricht erkannt hat
 	struct
 	{
-		bool extended;														// Erweiterte ID (29 Bit)
-		bool remote;														// Remote Sendeanforderung
-		bool overrun;														// Nachrichten ueberlauf
-		bool reserved;
+		uint8_t extended:1;													// Erweiterte ID (29 Bit)
+		uint8_t remote:1;													// Remote Sendeanforderung
+		uint8_t overrun:1;													// Nachrichten ueberlauf
+		uint8_t reserved:5;													// Flags haben alle 1 Bit, Deshalb sind 5 Bit reserviert
 	} flags;
 	uint8_t len;															// Nachrichtenlaenge
 	uint8_t buf[8];															// Datenbuffer
 	int8_t mb;																// Identifier welche Mailbox benutzt werden soll
 	uint8_t bus;															// Identifier welche Bus benutzt werden soll
 	bool seq;																// Sequentiale Rahmen
-} CAN_massage_t;
+} CAN_message_t;
 //----------------------------------------------------------------------
 typedef struct RingbufferTypeDef
 {
 	volatile uint16_t head;													// Kopf des Ringbusses
 	volatile uint16_t tail;													// Schwanz des Ringbusses
 	uint16_t size;															// Groesse des Ringbusses
-	volatile CAN_massage_t *buffer;											// Nachrichtenbuffer
+	volatile CAN_message_t *buffer;											// Nachrichtenbuffer
 } RingbufferTypeDef;
+//----------------------------------------------------------------------
+typedef struct CAN_PaketTypeDef
+{
+	CAN_message_t msg;														// CAN-Nachricht
+	uint16_t sendeintervall;												// Intervall, wie oft die Nachricht gesendet wird (in ms)
+	uint32_t sende_time;													// Startzeit, ab wann die Nachricht gesendet wird
+} CAN_PaketTypeDef;
+//----------------------------------------------------------------------
+
+// Arrays definieren
+//----------------------------------------------------------------------
+extern CAN_PaketTypeDef CAN_Output_PaketListe[ANZAHL_OUTPUT_PAKETE];
 //----------------------------------------------------------------------
 
 // Funktionen definieren
 //----------------------------------------------------------------------
 void CANinit(RXQUEUE_TABLE rxSize, TXQUEUE_TABLE txSize);
-bool CANwrite(CAN_massage_t *CAN_tx_msg, bool MB);
+bool CANwrite(CAN_message_t *CAN_tx_msg, bool MB);
 uint8_t CAN_available(void);
-bool CANread(CAN_massage_t *CAN_rx_msg);
+bool CANread(CAN_message_t *CAN_rx_msg);
+void CANwork(void);
+void CAN_config(void);
 bool isInitialized(void);
 void initializeBuffer(void);
-void initRingBuffer(RingbufferTypeDef *ring, volatile CAN_massage_t *buffer, uint32_t size);
-bool addToRingBuffer(RingbufferTypeDef *ring, CAN_massage_t *msg);
-bool removeFromRingBuffer(RingbufferTypeDef *ring, CAN_massage_t *msg);
+void initRingBuffer(RingbufferTypeDef *ring, volatile CAN_message_t *buffer, uint32_t size);
+bool addToRingBuffer(RingbufferTypeDef *ring, CAN_message_t *msg);
+bool removeFromRingBuffer(RingbufferTypeDef *ring, CAN_message_t *msg);
 bool isRingBufferEmpty(RingbufferTypeDef *ring);
+CAN_PaketTypeDef CAN_Nachricht(uint16_t id, uint8_t length, uint16_t sendeintervall, uint32_t sende_time);
 //----------------------------------------------------------------------
 
 #endif /* INC_CAN_BUS_H_ */
