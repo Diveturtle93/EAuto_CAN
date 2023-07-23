@@ -27,7 +27,7 @@
 
 // Konstanten definieren
 //----------------------------------------------------------------------
-#define ANZAHL_OUTPUT_PAKETE			24									// Anzahl Sende Nachrichten
+
 //----------------------------------------------------------------------
 
 //----------------------------------------------------------------------
@@ -59,7 +59,7 @@ typedef enum																// TypeDef fuer Sendebuffer groesse
 	TX_SIZE_1024 = (uint16_t)1024,
 } TXQUEUE_TABLE;
 //----------------------------------------------------------------------
-typedef struct CAN_message_t
+typedef struct
 {
 	uint32_t id;															// CAN Identifier
 	uint16_t timestamp;														// Zeit wann die Nachricht angekommen ist
@@ -78,7 +78,7 @@ typedef struct CAN_message_t
 	bool seq;																// Sequentiale Rahmen
 } CAN_message_t;
 //----------------------------------------------------------------------
-typedef struct RingbufferTypeDef
+typedef struct
 {
 	volatile uint16_t head;													// Kopf des Ringbusses
 	volatile uint16_t tail;													// Schwanz des Ringbusses
@@ -86,7 +86,7 @@ typedef struct RingbufferTypeDef
 	volatile CAN_message_t *buffer;											// Nachrichtenbuffer
 } RingbufferTypeDef;
 //----------------------------------------------------------------------
-typedef struct CAN_PaketTypeDef
+typedef struct
 {
 	CAN_message_t msg;														// CAN-Nachricht
 	uint16_t sendeintervall;												// Intervall, wie oft die Nachricht gesendet wird (in ms)

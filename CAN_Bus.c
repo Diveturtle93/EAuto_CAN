@@ -74,7 +74,7 @@ bool CANwrite(CAN_message_t *CAN_tx_msg, bool sendMB)
 	CAN_TxHeaderTypeDef TxHeader;
 
 	// Schalte Sendeinterrupt aus
-	//HAL_CAN_DeactivateNotification(&hcan3, CAN_IT_TX_MAILBOX_EMPTY);
+	HAL_CAN_DeactivateNotification(&hcan3, CAN_IT_TX_MAILBOX_EMPTY);
 
 	// CAN-Nachricht hat extended ID
 	if (CAN_tx_msg->flags.extended == 1)
@@ -100,7 +100,7 @@ bool CANwrite(CAN_message_t *CAN_tx_msg, bool sendMB)
 		if (sendMB != true)
 		{
 			// Wenn Ring keinen Platz mehr hat
-			if (addToRingBuffer(&txRing, CAN_tx_msg) == false)
+			if (addToRingBuffer(&txRing, (void *)CAN_tx_msg) == false)
 			{
 				ret = false;												// Kein Platz mehr im Ringbuffer
 			}
@@ -113,7 +113,7 @@ bool CANwrite(CAN_message_t *CAN_tx_msg, bool sendMB)
 	}
 
 	// Schalte Sendeinterrupt ein
-	//HAL_CAN_ActivateNotification(&hcan3, CAN_IT_TX_MAILBOX_EMPTY);
+	HAL_CAN_ActivateNotification(&hcan3, CAN_IT_TX_MAILBOX_EMPTY);
 	return ret;
 }
 //----------------------------------------------------------------------
@@ -156,7 +156,7 @@ void CANwork(void)
 	{
 		if (CAN_Output_PaketListe[i].sende_time < (millis() - CAN_Output_PaketListe[i].sendeintervall))
 		{
-			if (CANwrite(&CAN_Output_PaketListe[i].msg, true) != 1)
+			if (CANwrite(&CAN_Output_PaketListe[i].msg, false) != 1)
 			{
 
 			}
@@ -169,7 +169,7 @@ void CANwork(void)
 }
 //----------------------------------------------------------------------
 
-//
+// CAN Nachricht definieren, Datentyp anpassen
 //----------------------------------------------------------------------
 CAN_PaketTypeDef CAN_Nachricht(uint16_t id, uint8_t length, uint16_t sendeintervall, uint32_t sende_time)
 {
